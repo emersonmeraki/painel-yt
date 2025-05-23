@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>YT Upload Manager</title>
+  <style>
+    body { font-family: Arial, sans-serif; background-color: #f2f2f2; margin: 0; padding: 0; }
+    .container { max-width: 1000px; margin: 40px auto; background: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); }
+    h1 { text-align: center; margin-bottom: 20px; }
+    .auth-section { text-align: center; margin-bottom: 20px; }
+    .auth-section input { padding: 10px; width: 250px; margin: 5px; border: 1px solid #ccc; border-radius: 6px; }
+    .auth-section button { padding: 10px 15px; margin: 5px; background: #00796b; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+    .auth-section button:hover { background: #004d40; }
+    .stats { display: flex; justify-content: space-around; flex-wrap: wrap; margin-bottom: 20px; }
+    .stat { background: #e0f7fa; padding: 10px 20px; margin: 10px; border-radius: 8px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 10px; border: 1px solid #ccc; text-align: center; }
+    th { background: #00796b; color: white; }
+    .actions { text-align: right; margin-top: 20px; }
+    .actions button { padding: 10px 15px; background: #00796b; color: white; border: none; border-radius: 6px; cursor: pointer; }
+    .actions button:hover { background: #004d40; }
+  </style>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js"></script>
+</head>
+<body>
+  <div class="container">
+    <h1>YT Upload – Painel de Gerenciamento</h1>
+    <div class="auth-section">
+      <input type="email" id="email" placeholder="Seu e-mail" />
+      <input type="password" id="senha" placeholder="Sua senha" /><br />
+      <button onclick="registrar()">Criar conta</button>
+      <button onclick="logar()">Fazer login</button>
+      <button onclick="sair()">Sair</button>
+    </div>
+    <div id="userArea" style="display:none;">
+      <div class="stats" id="summary"></div>
+      <table id="channelTable"><thead><tr>
+        <th>Canal</th><th>Vídeos Disponíveis</th><th>Agendados</th><th>Postados</th><th>Monetizado?</th>
+      </tr></thead><tbody></tbody></table>
+      <div class="actions"><button onclick="addChannel()">Adicionar Canal</button></div>
+    </div>
+  </div>
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyDDHFOfzNK5yhp_3JK4Ez-WTJnBUfyZEzw",
+      authDomain: "meu-app-7cadd.firebaseapp.com",
+      projectId: "meu-app-7cadd",
+      storageBucket: "meu-app-7cadd.firebasestorage.app",
+      messagingSenderId: "945940938596",
+      appId: "1:945940938596:web:2bdbd23bcffbba35b74471"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+    let userId = null;
+    let channels = [];
+
+    function registrar() {
+      const email = document.getElementById("email").value;
+      const senha = document.getElementById("senha").value;
+      auth.createUserWithEmailAndPassword(email, senha)
+        .then(() => alert("Conta criada com sucesso!"))
+        .catch(err => alert("Erro ao registrar: " + err.message));
+    }
+
+    function logar() {
+      const email = document.getElementById("email").value;
+      const senha = document.getElementById("senha").value;
+      auth.signInWithEmailAndPassword(email, senha)
+        .then(() => console.log("Login feito com sucesso."))
+        .catch(err => alert("Erro ao fazer login: " + err.message));
+    }
+
+    function sair() {
+      auth.signOut();
+    }
+
+    auth.onAuthStateChanged(user => {
+      if (user) {
+        userId = user.uid;
+        document.getElementById("userArea").style.display = "block";
+        carregarDados();
+      } else {
+        document.getElementById("userArea").style.display = "none";
+        userId = null;
+      }
+    });
+
+    function carregarDados() {
+      db.collection("usuarios").doc(userId).get().then(doc => {
+        channels = doc.exists ? doc.data().channels || [] : [];
+        updateSummary();
+        renderTable();
+      });
+    }
+
+    function salvarDados() {
+      db.collection("usuarios").doc(userId).set({ channels });
+    }
+
+    function updateSummary() {
+      const total = channels.length;
+      const monetized = channels.filter(c => c.monetized).length;
+      const notMonetized = total - monetized;
+      const totalVideos = channels.reduce((acc, c) => acc + c.available + c.scheduled + c.posted, 0);
+      const available = channels.reduce((acc, c) => acc + c.available, 0);
+      const posted = channels.reduce((acc, c) => acc + c.posted, 0);
+
+      document.getElementById("summary").innerHTML = `
+        <div class="stat">Total de Canais: <strong>${total}</strong></div>
+        <div class="stat">Canais Monetizados: <strong>${monetized}</strong></div>
+        <div class="stat">Canais Não Monetizados: <strong>${notMonetized}</strong></div>
+        <div class="stat">Total de Vídeos: <strong>${totalVideos}</strong></div>
+        <div class="stat">Vídeos Disponíveis: <strong>${available}</strong></div>
+        <div class="stat">Vídeos Postados: <strong>${posted}</strong></div>`;
+    }
+
+    function renderTable() {
+      const tbody = document.querySelector("#channelTable tbody");
+      tbody.innerHTML = "";
+      channels.forEach(channel => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${channel.name}</td>
+          <td>${channel.available}</td>
+          <td>${channel.scheduled}</td>
+          <td>${channel.posted}</td>
+          <td>${channel.monetized ? "✔️" : "❌"}</td>`;
+        tbody.appendChild(row);
+      });
+    }
+
+    function addChannel() {
+      const name = prompt("Nome do canal:");
+      if (!name) return;
+      const available = parseInt(prompt("Vídeos disponíveis:"), 10) || 0;
+      const scheduled = parseInt(prompt("Vídeos agendados:"), 10) || 0;
+      const posted = parseInt(prompt("Vídeos postados:"), 10) || 0;
+      const monetized = confirm("O canal é monetizado?");
+      channels.push({ name, available, scheduled, posted, monetized });
+      salvarDados();
+      updateSummary();
+      renderTable();
+    }
+  </script>
+</body>
+</html>
