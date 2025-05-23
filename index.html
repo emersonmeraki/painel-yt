@@ -21,11 +21,6 @@
     .actions button { padding: 10px 15px; background: #00796b; color: white; border: none; border-radius: 6px; cursor: pointer; }
     .actions button:hover { background: #004d40; }
   </style>
-
-  <!-- Firebase SDKs (inclusão correta para evitar erro "firebase is not defined") -->
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js"></script>
 </head>
 <body>
   <div class="container">
@@ -45,7 +40,12 @@
       <div class="actions"><button onclick="addChannel()">Adicionar Canal</button></div>
     </div>
   </div>
-  <script>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
+    import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
+    import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+
     const firebaseConfig = {
       apiKey: "AIzaSyDDHFOfzNK5yhp_3JK4Ez-WTJnBUfyZEzw",
       authDomain: "meu-app-7cadd.firebaseapp.com",
@@ -54,53 +54,58 @@
       messagingSenderId: "945940938596",
       appId: "1:945940938596:web:2bdbd23bcffbba35b74471"
     };
-    firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
-    const db = firebase.firestore();
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
     let userId = null;
     let channels = [];
 
-    function registrar() {
+    window.registrar = async function () {
       const email = document.getElementById("email").value;
       const senha = document.getElementById("senha").value;
-      auth.createUserWithEmailAndPassword(email, senha)
-        .then(() => alert("Conta criada com sucesso!"))
-        .catch(err => alert("Erro ao registrar: " + err.message));
+      try {
+        await createUserWithEmailAndPassword(auth, email, senha);
+        alert("Conta criada com sucesso!");
+      } catch (err) {
+        alert("Erro ao registrar: " + err.message);
+      }
     }
 
-    function logar() {
+    window.logar = async function () {
       const email = document.getElementById("email").value;
       const senha = document.getElementById("senha").value;
-      auth.signInWithEmailAndPassword(email, senha)
-        .then(() => console.log("Login feito com sucesso."))
-        .catch(err => alert("Erro ao fazer login: " + err.message));
+      try {
+        await signInWithEmailAndPassword(auth, email, senha);
+        console.log("Login feito com sucesso.");
+      } catch (err) {
+        alert("Erro ao fazer login: " + err.message);
+      }
     }
 
-    function sair() {
-      auth.signOut();
+    window.sair = function () {
+      signOut(auth);
     }
 
-    auth.onAuthStateChanged(user => {
+    onAuthStateChanged(auth, async (user) => {
       if (user) {
         userId = user.uid;
         document.getElementById("userArea").style.display = "block";
-        carregarDados();
+        const ref = doc(db, "usuarios", userId);
+        const snapshot = await getDoc(ref);
+        channels = snapshot.exists() ? snapshot.data().channels || [] : [];
+        updateSummary();
+        renderTable();
       } else {
         document.getElementById("userArea").style.display = "none";
         userId = null;
       }
     });
 
-    function carregarDados() {
-      db.collection("usuarios").doc(userId).get().then(doc => {
-        channels = doc.exists ? doc.data().channels || [] : [];
-        updateSummary();
-        renderTable();
-      });
-    }
-
     function salvarDados() {
-      db.collection("usuarios").doc(userId).set({ channels });
+      if (!userId) return;
+      setDoc(doc(db, "usuarios", userId), { channels });
     }
 
     function updateSummary() {
@@ -135,7 +140,7 @@
       });
     }
 
-    function addChannel() {
+    window.addChannel = function () {
       const name = prompt("Nome do canal:");
       if (!name) return;
       const available = parseInt(prompt("Vídeos disponíveis:"), 10) || 0;
@@ -150,3 +155,4 @@
   </script>
 </body>
 </html>
+
